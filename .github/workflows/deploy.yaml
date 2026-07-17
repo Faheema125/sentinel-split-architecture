@@ -145,17 +145,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install kubeval
+      - name: Install kubeconform
         run: |
-          wget -q https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
-          tar xf kubeval-linux-amd64.tar.gz
-          sudo mv kubeval /usr/local/bin/
+          wget -q https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
 
       - name: Validate backend manifests
-        run: kubeval kubernetes/backend/*.yaml --strict
+        run: kubeconform -strict kubernetes/backend/*.yaml
 
       - name: Validate gateway manifests
-        run: kubeval kubernetes/gateway/*.yaml --strict
+        run: kubeconform -strict kubernetes/gateway/*.yaml
 
   # ---- Stage 5: Deploy backend app to backend cluster ----
   deploy-backend:
