@@ -87,7 +87,7 @@ module "eks_gateway" {
   node_role_arn       = module.iam.eks_node_role_arn_gateway
   subnet_ids          = module.vpc_gateway.private_subnet_ids
   vpc_id              = module.vpc_gateway.vpc_id
-  kubernetes_version  = "1.29"
+  kubernetes_version  = "1.31"
   environment         = var.environment
   node_instance_types = ["t3.medium"]
   node_desired_size   = 2
@@ -108,7 +108,7 @@ module "eks_backend" {
   node_role_arn       = module.iam.eks_node_role_arn_backend
   subnet_ids          = module.vpc_backend.private_subnet_ids
   vpc_id              = module.vpc_backend.vpc_id
-  kubernetes_version  = "1.29"
+  kubernetes_version  = "1.31"
   environment         = var.environment
   node_instance_types = ["t3.medium"]
   node_desired_size   = 2
