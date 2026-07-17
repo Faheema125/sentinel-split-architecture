@@ -29,8 +29,6 @@ resource "aws_iam_role" "eks_cluster" {
       }
     }]
   })
-
-  tags = { Name = "eks-cluster-role-${var.environment}" }
 }
 
 # Permissions: manage cluster networking and load balancers
@@ -59,8 +57,6 @@ resource "aws_iam_role" "eks_node_gateway" {
       }
     }]
   })
-
-  tags = { Name = "eks-node-gateway-role-${var.environment}" }
 }
 
 resource "aws_iam_role_policy_attachment" "node_gw_worker" {
@@ -93,8 +89,6 @@ resource "aws_iam_role" "eks_node_backend" {
       }
     }]
   })
-
-  tags = { Name = "eks-node-backend-role-${var.environment}" }
 }
 
 resource "aws_iam_role_policy_attachment" "node_be_worker" {

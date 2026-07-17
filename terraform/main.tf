@@ -26,15 +26,6 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-
-  # Every resource gets these tags automatically. Helps with billing & finding stuff.
-  default_tags {
-    tags = {
-      Project     = "rapyd-sentinel"
-      Environment = var.environment
-      ManagedBy   = "terraform"
-    }
-  }
 }
 
 # ---- Build the Gateway VPC ----
