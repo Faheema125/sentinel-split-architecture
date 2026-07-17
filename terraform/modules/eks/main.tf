@@ -1,3 +1,13 @@
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
 resource "aws_eks_cluster" "this" {
   name     = "${var.cluster_name}-${var.environment}"
   role_arn = var.cluster_role_arn
