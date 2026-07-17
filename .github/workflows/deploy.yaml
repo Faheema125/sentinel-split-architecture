@@ -1,0 +1,254 @@
+name: "Sentinel Infrastructure & Deploy"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-west-2
+  TF_VERSION: "1.7.0"
+  EKS_GATEWAY_CLUSTER: "eks-gateway-dev"
+  EKS_BACKEND_CLUSTER: "eks-backend-dev"
+
+jobs:
+  # ---- Stage 1: Check if terraform code is valid ----
+  terraform-validate:
+    name: "Terraform Validate & Lint"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: TFLint Init
+        run: tflint --init
+
+      - name: TFLint Run
+        run: tflint --recursive
+
+  # ---- Stage 2: Show what terraform will create ----
+  terraform-plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    needs: terraform-validate
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -input=false
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/tfplan
+
+  # ---- Stage 3: Actually create the infrastructure (only on main) ----
+  terraform-apply:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+  # ---- Stage 4: Validate kubernetes YAML files ----
+  k8s-validate:
+    name: "Validate Kubernetes Manifests"
+    runs-on: ubuntu-latest
+    needs: terraform-validate
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubeval
+        run: |
+          wget -q https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
+          tar xf kubeval-linux-amd64.tar.gz
+          sudo mv kubeval /usr/local/bin/
+
+      - name: Validate backend manifests
+        run: kubeval kubernetes/backend/*.yaml --strict
+
+      - name: Validate gateway manifests
+        run: kubeval kubernetes/gateway/*.yaml --strict
+
+  # ---- Stage 5: Deploy backend app to backend cluster ----
+  deploy-backend:
+    name: "Deploy Backend Service"
+    runs-on: ubuntu-latest
+    needs: [terraform-apply, k8s-validate]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    outputs:
+      backend_lb_dns: ${{ steps.get-backend-lb.outputs.dns }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl for backend cluster
+        run: aws eks update-kubeconfig --name ${{ env.EKS_BACKEND_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Deploy backend
+        run: |
+          kubectl apply -f kubernetes/backend/namespace.yaml
+          kubectl apply -f kubernetes/backend/deployment.yaml
+          kubectl apply -f kubernetes/backend/service.yaml
+          kubectl apply -f kubernetes/backend/networkpolicy.yaml
+
+      - name: Wait for pods to be ready
+        run: kubectl rollout status deployment/sentinel-backend -n sentinel --timeout=120s
+
+      - name: Get backend internal load balancer DNS
+        id: get-backend-lb
+        run: |
+          for i in {1..30}; do
+            DNS=$(kubectl get svc sentinel-backend -n sentinel -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+            if [ -n "$DNS" ]; then
+              echo "dns=$DNS" >> $GITHUB_OUTPUT
+              echo "Backend LB DNS: $DNS"
+              break
+            fi
+            echo "Waiting for LB... ($i/30)"
+            sleep 10
+          done
+
+  # ---- Stage 6: Deploy gateway proxy with backend's address ----
+  deploy-gateway:
+    name: "Deploy Gateway Proxy"
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl for gateway cluster
+        run: aws eks update-kubeconfig --name ${{ env.EKS_GATEWAY_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Inject backend address into gateway config
+        run: |
+          BACKEND_DNS="${{ needs.deploy-backend.outputs.backend_lb_dns }}"
+          echo "Gateway will forward traffic to: $BACKEND_DNS"
+          sed -i "s|BACKEND_SERVICE_HOST|${BACKEND_DNS}|g" kubernetes/gateway/deployment.yaml
+
+      - name: Deploy gateway
+        run: |
+          kubectl apply -f kubernetes/gateway/namespace.yaml
+          kubectl apply -f kubernetes/gateway/deployment.yaml
+          kubectl apply -f kubernetes/gateway/service.yaml
+
+      - name: Wait for pods to be ready
+        run: kubectl rollout status deployment/sentinel-gateway -n sentinel --timeout=120s
+
+      - name: Smoke test
+        run: |
+          GATEWAY_DNS=$(kubectl get svc sentinel-gateway -n sentinel -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "Testing: http://$GATEWAY_DNS/"
+          sleep 30
+          RESPONSE=$(curl -s --connect-timeout 10 --max-time 30 "http://$GATEWAY_DNS/" || echo "FAILED")
+          echo "Response: $RESPONSE"
+          if echo "$RESPONSE" | grep -q "Hello from backend"; then
+            echo "SUCCESS: gateway reached backend through VPC peering"
+          else
+            echo "WARNING: could not verify (LB may still be starting)"
+          fi
