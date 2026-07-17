@@ -84,3 +84,45 @@ module "vpc_peering" {
   accepter_route_table_ids  = module.vpc_backend.private_route_table_ids
   environment               = var.environment
 }
+
+# ---- EKS Gateway Cluster ----
+# Runs the NGINX proxy. Public load balancer points here.
+module "eks_gateway" {
+  source = "./modules/eks"
+
+  cluster_name        = "eks-gateway"
+  cluster_role_arn    = module.iam.eks_cluster_role_arn
+  node_role_arn       = module.iam.eks_node_role_arn_gateway
+  subnet_ids          = module.vpc_gateway.private_subnet_ids
+  vpc_id              = module.vpc_gateway.vpc_id
+  kubernetes_version  = "1.29"
+  environment         = var.environment
+  node_instance_types = ["t3.medium"]
+  node_desired_size   = 2
+  node_min_size       = 1
+  node_max_size       = 3
+
+  # allow traffic from backend VPC (for responses)
+  allowed_cidr_blocks = ["10.1.0.0/16"]
+}
+
+# ---- EKS Backend Cluster ----
+# Runs the "Hello from backend" app. NOT public. Only gateway can reach it.
+module "eks_backend" {
+  source = "./modules/eks"
+
+  cluster_name        = "eks-backend"
+  cluster_role_arn    = module.iam.eks_cluster_role_arn
+  node_role_arn       = module.iam.eks_node_role_arn_backend
+  subnet_ids          = module.vpc_backend.private_subnet_ids
+  vpc_id              = module.vpc_backend.vpc_id
+  kubernetes_version  = "1.29"
+  environment         = var.environment
+  node_instance_types = ["t3.medium"]
+  node_desired_size   = 2
+  node_min_size       = 1
+  node_max_size       = 3
+
+  # ONLY allow traffic from gateway VPC — this is the key security control
+  allowed_cidr_blocks = ["10.0.0.0/16"]
+}
