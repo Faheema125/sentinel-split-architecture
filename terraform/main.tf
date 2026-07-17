@@ -15,11 +15,12 @@ terraform {
   # Where terraform remembers what it created.
   # Without this, it would forget and try to create duplicates.
   backend "s3" {
-    bucket         = "sentinel-terraform-state-rapyd"
-    key            = "sentinel-split/terraform.tfstate"
-    region         = "us-west-2"
-    encrypt        = true
-    dynamodb_table = "sentinel-terraform-locks"
+    bucket  = "sentinel-terraform-state-rapyd"
+    key     = "sentinel-split/terraform.tfstate"
+    region  = "us-west-2"
+    encrypt = true
+    # DynamoDB locking skipped — no dynamodb:CreateTable permission in this account.
+    # In production, you'd add a DynamoDB table to prevent concurrent state changes.
   }
 }
 
