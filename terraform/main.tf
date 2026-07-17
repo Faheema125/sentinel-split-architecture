@@ -64,6 +64,13 @@ module "vpc_backend" {
   enable_nat_gateway   = true
 }
 
+# ---- IAM roles ----
+# EKS needs roles with permissions to manage clusters and nodes.
+module "iam" {
+  source      = "./modules/iam"
+  environment = var.environment
+}
+
 # ---- Connect the two VPCs with a private tunnel ----
 # Without this, gateway and backend can't talk at all.
 module "vpc_peering" {
