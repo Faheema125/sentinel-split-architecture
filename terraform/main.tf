@@ -63,3 +63,17 @@ module "vpc_backend" {
   environment          = var.environment
   enable_nat_gateway   = true
 }
+
+# ---- Connect the two VPCs with a private tunnel ----
+# Without this, gateway and backend can't talk at all.
+module "vpc_peering" {
+  source = "./modules/peering"
+
+  requester_vpc_id          = module.vpc_gateway.vpc_id
+  accepter_vpc_id           = module.vpc_backend.vpc_id
+  requester_vpc_cidr        = "10.0.0.0/16"
+  accepter_vpc_cidr         = "10.1.0.0/16"
+  requester_route_table_ids = module.vpc_gateway.private_route_table_ids
+  accepter_route_table_ids  = module.vpc_backend.private_route_table_ids
+  environment               = var.environment
+}
