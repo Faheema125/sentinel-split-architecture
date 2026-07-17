@@ -1,0 +1,79 @@
+# Gateway proxy — receives public traffic and forwards it to the backend
+# through VPC peering.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel-gateway
+  namespace: sentinel
+  labels:
+    app: sentinel-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentinel-gateway
+  template:
+    metadata:
+      labels:
+        app: sentinel-gateway
+    spec:
+      containers:
+        - name: proxy
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: gateway-nginx-config
+---
+# NGINX reverse proxy config.
+# BACKEND_SERVICE_HOST is a placeholder — the CI/CD pipeline replaces it
+# with the actual internal load balancer DNS of the backend service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-nginx-config
+  namespace: sentinel
+data:
+  default.conf: |
+    upstream backend {
+        server BACKEND_SERVICE_HOST:80;
+    }
+    server {
+        listen 80;
+        location / {
+            proxy_pass http://backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location /health {
+            access_log off;
+            return 200 '{"status":"healthy","service":"gateway"}';
+            add_header Content-Type application/json;
+        }
+    }

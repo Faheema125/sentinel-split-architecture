@@ -1,0 +1,5 @@
+# Namespace = a folder inside the cluster to keep our stuff organized.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sentinel

@@ -1,0 +1,29 @@
+# NetworkPolicy = pod-level firewall.
+# Only allows traffic from the gateway VPC (10.0.0.0/16) on port 80.
+# Everything else is denied.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sentinel-backend-policy
+  namespace: sentinel
+spec:
+  podSelector:
+    matchLabels:
+      app: sentinel-backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.0.0.0/16    # only gateway VPC can reach these pods
+      ports:
+        - protocol: TCP
+          port: 80
+  egress:
+    # allow DNS lookups
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

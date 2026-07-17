@@ -1,0 +1,18 @@
+# This is the ONLY public entry point. Internet traffic comes in here.
+# Creates a public-facing load balancer that forwards to the gateway pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-gateway
+  namespace: sentinel
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+spec:
+  type: LoadBalancer
+  selector:
+    app: sentinel-gateway
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP

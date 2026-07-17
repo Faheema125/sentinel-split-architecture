@@ -1,0 +1,20 @@
+# Service = gives the backend pods a stable address.
+# Type: LoadBalancer with "internal" annotation = creates a PRIVATE load balancer.
+# Only reachable from within AWS (via VPC peering), NOT from the internet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-backend
+  namespace: sentinel
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+spec:
+  type: LoadBalancer
+  selector:
+    app: sentinel-backend
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP

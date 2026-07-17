@@ -1,0 +1,87 @@
+# Deployment = "run 2 copies of this container, keep them alive"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel-backend
+  namespace: sentinel
+  labels:
+    app: sentinel-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentinel-backend
+  template:
+    metadata:
+      labels:
+        app: sentinel-backend
+    spec:
+      containers:
+        - name: backend
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+            - name: html
+              mountPath: /usr/share/nginx/html/index.html
+              subPath: index.html
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: backend-nginx-config
+        - name: html
+          configMap:
+            name: backend-html
+---
+# NGINX config — tells nginx what to do with requests
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-nginx-config
+  namespace: sentinel
+data:
+  default.conf: |
+    server {
+        listen 80;
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+        }
+        location /health {
+            access_log off;
+            return 200 '{"status":"healthy"}';
+            add_header Content-Type application/json;
+        }
+    }
+---
+# The actual content our backend serves
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-html
+  namespace: sentinel
+data:
+  index.html: |
+    Hello from backend
