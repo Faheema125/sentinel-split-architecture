@@ -15,21 +15,9 @@ env:
   TF_VERSION: "1.7.0"
   EKS_GATEWAY_CLUSTER: "eks-gateway-dev"
   EKS_BACKEND_CLUSTER: "eks-backend-dev"
-  AWS_ROLE_ARN: arn:aws:iam::721500739616:role/sentinel-github-actions-faheema-v2
+  AWS_ROLE_ARN: arn:aws:iam::721500739616:role/sentinel-github-actions-faheema-v3
 
 jobs:
-  # ---- Debug: Check OIDC token claims ----
-  debug-oidc:
-    name: "Debug OIDC Token"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get OIDC token and decode claims
-        run: |
-          TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
-          echo "Token payload:"
-          echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq .
-
   # ---- Stage 1: Check if terraform code is valid ----
   terraform-validate:
     name: "Terraform Validate & Lint"
