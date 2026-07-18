@@ -15,7 +15,7 @@ env:
   TF_VERSION: "1.7.0"
   EKS_GATEWAY_CLUSTER: "eks-gateway-dev"
   EKS_BACKEND_CLUSTER: "eks-backend-dev"
-  AWS_ROLE_ARN: arn:aws:iam::721500739616:role/sentinel-github-actions-faheema
+  AWS_ROLE_ARN: arn:aws:iam::721500739616:role/sentinel-github-actions-faheema-v2
 
 jobs:
   # ---- Stage 1: Check if terraform code is valid ----
