@@ -239,12 +239,4 @@ Per the challenge constraints, all IAM roles follow approved prefixes:
 - `eks-node-backend-role-dev` — Backend node group role
 - `sentinel-github-actions-faheema-v3` — CI/CD OIDC role
 
----
 
-## Assumptions & Limitations
-
-1. **S3 backend bucket** (`sentinel-terraform-state-rapyd`) was pre-created by the account admin
-2. **OIDC provider** for GitHub was pre-registered in the account
-3. **DynamoDB state locking** was skipped due to missing `dynamodb:CreateTable` permission — in production this is critical for concurrent safety
-4. **EKS cluster auth mode** was updated from `CONFIG_MAP` to `API_AND_CONFIG_MAP` to support access entries for the OIDC role
-5. **GitHub OIDC sub claim** uses the newer format with embedded numeric IDs (`repo:Owner@ID/repo@ID:ref:...`) — trust policies must match this format
